@@ -1,19 +1,79 @@
 rules_version = '2';
-
 service cloud.firestore {
   match /databases/{database}/documents {
-
-    // User-specific rules
+    // Users collection rules
     match /users/{userId} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
+      // Allow authenticated users to create their own document
+      allow create: if isAuthenticated() && request.auth.uid == userId;
+
+      // Allow users to read and update their own data
+      allow read, update: if isAuthenticated() && request.auth.uid == userId;
+
+      // Allow admin to manage all users
+      allow create, read, update, delete: if isAdmin();
     }
 
-    // Employees collection rules
-    match /employees/{employeeId} {
-      // Only allow admins to create, update, or delete employees
-      allow create, update, delete: if request.auth != null && request.auth.token.role == 'admin';
-      // Allow anyone to read employee data
-      allow read: if request.auth != null;
+    // Orders collection rules
+    match /orders/{orderId} {
+      // Customers can create their own orders
+      allow create: if isAuthenticated() && isCustomer();
+
+      // Customers can read their own orders
+      allow read: if isAuthenticated() && isCustomer() && resource.data.userId == request.auth.uid;
+
+      // Riders and admins can read and update any order
+      allow read, update: if isRider() || isAdmin();
+
+      // Only admins can delete orders
+      allow delete: if isAdmin();
     }
+
+    // Example: Services or Shop-related collections
+    match /services/{serviceId} {
+      // Shop owners can manage their own services
+      allow create, update, delete: if isShopOwner() && request.auth.uid == resource.data.shopOwnerId;
+
+      // Admins can read all services
+      allow read: if isAdmin();
+    }
+
+    match /products/{productId} {
+      // Shop owners can manage their own products
+      allow create, update, delete: if isShopOwner() && request.auth.uid == resource.data.shopOwnerId;
+
+      // Admins can read all products
+      allow read: if isAdmin();
+    }
+
+    // Nested resources for shopowners (like pictures or other subcollections)
+    match /shopowners/{shopOwnerId}/pictures/{pictureId} {
+      allow create, delete: if isShopOwner() && request.auth.uid == shopOwnerId;
+      allow read: if isShopOwner() || isAdmin();
+    }
+  }
+
+  // Helper functions
+  function isAuthenticated() {
+    return request.auth != null;
+  }
+
+  function isAdmin() {
+    return isAuthenticated() && request.auth.token.role == "admin";
+  }
+
+  function isEmployee() {
+    return isAuthenticated() && request.auth.token.role == "employee";
+  }
+
+  function isShopOwner() {
+    return isAuthenticated() && request.auth.token.role == "shopowner";
+  }
+
+  function isRider() {
+    return isAuthenticated() && request.auth.token.role == "rider";
+  }
+
+  function isCustomer() {
+    return isAuthenticated() && request.auth.token.role == "customer";
   }
 }
